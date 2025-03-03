@@ -19,175 +19,173 @@ import java.security.GeneralSecurityException;
 import java.util.*;
 
 public class EtiquetadorDeGmails {
-    private static final String APPLICATION_NAME = "Gmail Labeler App";
+    private static final String NOMBRE_APLICACION = "Gmail Labeler App";
     private static final JsonFactory JSON_FACTORY = JacksonFactory.getDefaultInstance();
-    private static final String TOKENS_DIRECTORY_PATH = "tokens";
+    private static final String DIRECTORIO_TOKENS = "tokens";
     private static final List<String> SCOPES = Collections.singletonList("https://www.googleapis.com/auth/gmail.modify");
-    private static final String CREDENTIALS_FILE_PATH = "src/main/resources/credentials.json";
+    private static final String CREDENCIALES = "src/main/resources/credentials.json";
 
-    private static Gmail service;
+    private static Gmail servicio;
 
     public static void main(String[] args) throws IOException, GeneralSecurityException {
 
-        final NetHttpTransport HTTP_TRANSPORT = GoogleNetHttpTransport.newTrustedTransport();
-        service = new Gmail.Builder(HTTP_TRANSPORT, JSON_FACTORY, conseguiCredenciales(HTTP_TRANSPORT))
-                .setApplicationName(APPLICATION_NAME)
+        final NetHttpTransport httpTransport = GoogleNetHttpTransport.newTrustedTransport();
+        servicio = new Gmail.Builder(httpTransport, JSON_FACTORY, conseguiCredenciales(httpTransport))
+                .setApplicationName(NOMBRE_APLICACION)
                 .build();
 
-        List<Message> messages = conseguirMensajes(service, "me");
-        if (messages.isEmpty()) {
+        List<Message> mensajes = conseguirMensajes(servicio, "me");
+        if (mensajes.isEmpty()) {
             System.out.println("No hay correos en la bandeja de entrada.");
             return;
         }
 
-        SwingUtilities.invokeLater(() -> new EmailVista(service, messages));
+        SwingUtilities.invokeLater(() -> new EmailVista(servicio, mensajes));
     }
-    private static Credential conseguiCredenciales(final NetHttpTransport HTTP_TRANSPORT) throws IOException {
-        File credentialsFile = new File(CREDENTIALS_FILE_PATH);
-        if (!credentialsFile.exists()) {
-            throw new FileNotFoundException("Archivo de credenciales no encontrado: " + credentialsFile.getAbsolutePath());
+    private static Credential conseguiCredenciales(final NetHttpTransport httpTransport) throws IOException {
+        File credencialRuta = new File(CREDENCIALES);
+        if (!credencialRuta.exists()) {
+            throw new FileNotFoundException("Archivo de credenciales no encontrado: " + credencialRuta.getAbsolutePath());
         }
 
-        InputStream in = new FileInputStream(credentialsFile);
+        InputStream in = new FileInputStream(credencialRuta);
         GoogleClientSecrets clientSecrets = GoogleClientSecrets.load(JSON_FACTORY, new InputStreamReader(in));
 
         GoogleAuthorizationCodeFlow flow = new GoogleAuthorizationCodeFlow.Builder(
-                HTTP_TRANSPORT, JSON_FACTORY, clientSecrets, SCOPES)
-                .setDataStoreFactory(new FileDataStoreFactory(new File(TOKENS_DIRECTORY_PATH)))
+                httpTransport, JSON_FACTORY, clientSecrets, SCOPES)
+                .setDataStoreFactory(new FileDataStoreFactory(new File(DIRECTORIO_TOKENS)))
                 .setAccessType("offline")
                 .build();
         return new AuthorizationCodeInstalledApp(flow, new LocalServerReceiver()).authorize("user");
     }
 
-    static List<Message> conseguirMensajes(Gmail service, String userId) throws IOException {
-        ListMessagesResponse response = service.users().messages().list(userId)
+    static List<Message> conseguirMensajes(Gmail servicio, String userId) throws IOException {
+        ListMessagesResponse response = servicio.users().messages().list(userId)
                 .setQ("in:all")
                 .setMaxResults(7L)
                 .execute();
 
-        List<Message> messages = response.getMessages();
+        List<Message> mensajes = response.getMessages();
 
-        if (messages == null || messages.isEmpty()) {
+        if (mensajes == null || mensajes.isEmpty()) {
             return new ArrayList<>();
         }
 
-        List<Message> validMessages = new ArrayList<>();
-        for (Message message : messages) {
-            Message fullMessage = service.users().messages().get(userId, message.getId()).execute();
-            if (!fullMessage.getSnippet().contains("Address not found") && !fullMessage.getSnippet().contains("550 5.1.1")) {
-                validMessages.add(fullMessage);
+        List<Message> mensajesValidos = new ArrayList<>();
+        for (Message mensaje : mensajes) {
+            Message mensajeEntero = servicio.users().messages().get(userId, mensaje.getId()).execute();
+            if (!mensajeEntero.getSnippet().contains("Address not found") && !mensajeEntero.getSnippet().contains("550 5.1.1")) {
+                mensajesValidos.add(mensajeEntero);
             }
         }
 
-        return validMessages;
+        return mensajesValidos;
     }
 
-    public static List<Message> etiquetarCorreos(Gmail service, List<Message> messages) throws IOException {
-        if (messages.size() < 7) {
+    public static List<Message> etiquetarCorreos(Gmail servicio, List<Message> mensajes) throws IOException {
+        if (mensajes.size() < 7) {
             System.out.println("No hay suficientes mensajes para etiquetar.");
-            return messages;
+            return mensajes;
         }
 
-        Map<String, String> labelMap = obtenerMapaEtiquetas(service);
+        Map<String, String> etiquetaDic = obtenerMapaEtiquetas(servicio);
         System.out.println("Iniciando etiquetado de correos...");
 
-        int doneCount = 3, inProgressCount = 1;
-        for (int i = 0; i < messages.size(); i++) {
-            Message message = service.users().messages().get("me", messages.get(i).getId()).execute();
-            List<String> labelIds = message.getLabelIds();
+        int DoneCantidad = 3;
+        int progreso = 1;
+        for (int i = 0; i < mensajes.size(); i++) {
+            Message mensaje = servicio.users().messages().get("me", mensajes.get(i).getId()).execute();
+            List<String> EtiquetaID = mensaje.getLabelIds();
 
-            if (labelIds.contains(labelMap.get("Done")) || labelIds.contains(labelMap.get("Work.in.Progress")) || labelIds.contains(labelMap.get("To.be.Done"))) {
-                System.out.println("El mensaje " + message.getId() + " ya tiene una etiqueta. Saltando...");
+            if (EtiquetaID.contains(etiquetaDic.get("Done")) || EtiquetaID.contains(etiquetaDic.get("Work.in.Progress")) || EtiquetaID.contains(etiquetaDic.get("To.be.Done"))) {
+                System.out.println("El mensaje " + mensaje.getId() + " ya tiene una etiqueta. Saltando...");
                 continue;
             }
 
-            String label = (i < doneCount) ? "Done" : (i < doneCount + inProgressCount) ? "Work.in.Progress" : "To.be.Done";
-            System.out.println("Asignando etiqueta '" + label + "' a mensaje ID: " + message.getId());
+            String label = (i < DoneCantidad) ? "Done" : (i < DoneCantidad + progreso) ? "Work.in.Progress" : "To.be.Done";
+            System.out.println("Asignando etiqueta '" + label + "' a mensaje ID: " + mensaje.getId());
 
-            modificarMensaje(service, "me", message.getId(), label);
+            modificarMensaje(servicio, "me", mensaje.getId(), label);
         }
 
         System.out.println("Proceso de etiquetado finalizado.");
 
-        return conseguirMensajes(service, "me");
+        return conseguirMensajes(servicio, "me");
     }
 
 
-    private static void modificarMensaje(Gmail service, String userId, String messageId, String newLabelName) throws IOException {
-        Map<String, String> labelMap = obtenerMapaEtiquetas(service);
-        String newLabelId = labelMap.get(newLabelName);
+    private static void modificarMensaje(Gmail servicio, String usuarioId, String mensajeId, String mensajeEtiqueta) throws IOException {
+        Map<String, String> etiquetaDic = obtenerMapaEtiquetas(servicio);
+        String nuevaEtiquetaId = etiquetaDic.get(mensajeEtiqueta);
 
-        if (newLabelId == null) {
-            System.out.println("La etiqueta '" + newLabelName + "' no se encontró en Gmail. Verifica que existe.");
+        if (nuevaEtiquetaId == null) {
+            System.out.println("La etiqueta '" + mensajeEtiqueta + "' no se encontró en Gmail. Verifica que existe.");
             return;
         }
 
-        Message message = service.users().messages().get(userId, messageId).execute();
-        List<String> existingLabels = message.getLabelIds();
+        Message mensaje = servicio.users().messages().get(usuarioId, mensajeId).execute();
+        List<String> etiquetasActuales = mensaje.getLabelIds();
 
-        if (existingLabels.contains(newLabelId)) {
-            System.out.println("El mensaje ya tiene la etiqueta '" + newLabelName + "'. Saltando...");
+        if (etiquetasActuales.contains(nuevaEtiquetaId)) {
+            System.out.println("El mensaje ya tiene la etiqueta '" + mensajeEtiqueta + "'. Saltando...");
             return;
         }
 
-        List<String> labelsToRemove = new ArrayList<>();
-        for (String labelName : Arrays.asList("Done", "Work.in.Progress", "To.be.Done")) {
-            String labelId = labelMap.get(labelName);
-            if (labelId != null && existingLabels.contains(labelId)) {
-                labelsToRemove.add(labelId);
+        List<String> etiquetasEliminar = new ArrayList<>();
+        for (String nombreEtiquetas : Arrays.asList("Done", "Work.in.Progress", "To.be.Done")) {
+            String etiquetaId = etiquetaDic.get(nombreEtiquetas);
+            if (etiquetaId != null && etiquetasActuales.contains(etiquetaId)) {
+                etiquetasEliminar.add(etiquetaId);
             }
         }
 
-        List<String> labelsToAdd = Collections.singletonList(newLabelId);
+        List<String> etiquetasAnadir = Collections.singletonList(nuevaEtiquetaId);
 
         ModifyMessageRequest mods = new ModifyMessageRequest()
-                .setRemoveLabelIds(labelsToRemove)
-                .setAddLabelIds(labelsToAdd);
+                .setRemoveLabelIds(etiquetasEliminar)
+                .setAddLabelIds(etiquetasAnadir);
 
-        service.users().messages().modify(userId, messageId, mods).execute();
-        System.out.println("Se ha etiquetado correctamente el mensaje con: " + newLabelName);
+        servicio.users().messages().modify(usuarioId, mensajeId, mods).execute();
+        System.out.println("Se ha etiquetado correctamente el mensaje con: " + mensajeEtiqueta);
     }
 
 
 
 
-    static Map<String, String> obtenerMapaEtiquetas(Gmail service) throws IOException {
-        Map<String, String> nameToIdMap = new HashMap<>();
-        Map<String, String> idToNameMap = new HashMap<>();
+    static Map<String, String> obtenerMapaEtiquetas(Gmail servicio) throws IOException {
+        Map<String, String> nombreDicId = new HashMap<>();
+        Map<String, String> IdNombreDic = new HashMap<>();
 
-        List<Label> labels = service.users().labels().list("me").execute().getLabels();
+        List<Label> etiquetas = servicio.users().labels().list("me").execute().getLabels();
 
-        for (Label label : labels) {
-            nameToIdMap.put(label.getName(), label.getId());
-            idToNameMap.put(label.getId(), label.getName());
+        for (Label Etiqueta : etiquetas) {
+            nombreDicId.put(Etiqueta.getName(), Etiqueta.getId());
+            IdNombreDic.put(Etiqueta.getId(), Etiqueta.getName());
         }
 
-        for (String labelName : Arrays.asList("Done", "Work.in.Progress", "To.be.Done")) {
-            if (!nameToIdMap.containsKey(labelName)) {
-                System.out.println("La etiqueta '" + labelName + "' no existe. Creándola...");
-                String labelId = crearEtiquetas(service, labelName);
-                nameToIdMap.put(labelName, labelId);
-                idToNameMap.put(labelId, labelName);
+        for (String etiquetaNombre : Arrays.asList("Done", "Work.in.Progress", "To.be.Done")) {
+            if (!nombreDicId.containsKey(etiquetaNombre)) {
+                System.out.println("La etiqueta '" + etiquetaNombre + "' no existe. Creándola...");
+                String etiquetaId = crearEtiquetas(servicio, etiquetaNombre);
+                nombreDicId.put(etiquetaNombre, etiquetaId);
+                IdNombreDic.put(etiquetaId, etiquetaNombre);
             }
         }
 
-        nameToIdMap.putAll(idToNameMap);
+        nombreDicId.putAll(IdNombreDic);
 
-        return nameToIdMap;
+        return nombreDicId;
     }
 
-
-
-
-    private static String crearEtiquetas(Gmail service, String labelName) throws IOException {
-        Label newLabel = new Label()
-                .setName(labelName)
+    private static String crearEtiquetas(Gmail servicio, String nombreEtiqueta) throws IOException {
+        Label nuevaEtiqueta = new Label()
+                .setName(nombreEtiqueta)
                 .setLabelListVisibility("labelShow")
                 .setMessageListVisibility("show");
 
-        Label createdLabel = service.users().labels().create("me", newLabel).execute();
-        System.out.println("Etiqueta creada: " + labelName);
-        return createdLabel.getId();
+        Label crearEtiqueta = servicio.users().labels().create("me", nuevaEtiqueta).execute();
+        System.out.println("Etiqueta creada: " + nombreEtiqueta);
+        return crearEtiqueta.getId();
     }
 
 }

@@ -13,68 +13,68 @@ import java.util.List;
 import java.util.Map;
 
 public class EmailVista extends JFrame {
-    private Gmail service;
-    private List<Message> messages;
-    private JTable emailTable;
-    private DefaultTableModel tableModel;
-    private JButton labelButton;
+    private Gmail servicio;
+    private List<Message> mensaje;
+    private JTable tablaemail;
+    private DefaultTableModel tablaModelo;
+    private JButton boton;
 
-    public EmailVista(Gmail service, List<Message> messages) {
-        this.service = service;
-        this.messages = messages;
+    public EmailVista(Gmail servicio, List<Message> mensajes) {
+        this.servicio = servicio;
+        this.mensaje = mensajes;
 
         setTitle("Gestor de Correos - Gmail Labeler");
         setSize(600, 400);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
 
-        JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
-        mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        JPanel panelPrincipal = new JPanel(new BorderLayout(10, 10));
+        panelPrincipal.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        String[] columnNames = {"Asunto", "Etiquetas"};
-        tableModel = new DefaultTableModel(columnNames, 0);
-        emailTable = new JTable(tableModel);
-        JScrollPane scrollPane = new JScrollPane(emailTable);
+        String[] nombreColumnas = {"Asunto", "Etiquetas"};
+        tablaModelo = new DefaultTableModel(nombreColumnas, 0);
+        tablaemail = new JTable(tablaModelo);
+        JScrollPane panelDeslizable = new JScrollPane(tablaemail);
 
-        labelButton = new JButton("Etiquetar correos");
-        labelButton.setFont(new Font("Arial", Font.BOLD, 14));
-        labelButton.setBackground(new Color(30, 144, 255));
-        labelButton.setForeground(Color.WHITE);
-        labelButton.setFocusPainted(false);
-        labelButton.addActionListener(new ActionListener() {
+        boton = new JButton("Etiquetar correos");
+        boton.setFont(new Font("Arial", Font.BOLD, 14));
+        boton.setBackground(new Color(30, 144, 255));
+        boton.setForeground(Color.WHITE);
+        boton.setFocusPainted(false);
+        boton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
                 etiquetarCorreos();
             }
         });
 
-        mainPanel.add(scrollPane, BorderLayout.CENTER);
-        mainPanel.add(labelButton, BorderLayout.SOUTH);
+        panelPrincipal.add(panelDeslizable, BorderLayout.CENTER);
+        panelPrincipal.add(boton, BorderLayout.SOUTH);
 
-        add(mainPanel);
+        add(panelPrincipal);
         setVisible(true);
-        cargarEmails(messages);
+        cargarEmails(mensajes);
     }
     private void cargarEmails(List<Message> updatedMessages) {
-        tableModel.setRowCount(0);
+        tablaModelo.setRowCount(0);
 
         try {
 
-            Map<String, String> idToNameMap = EtiquetadorDeGmails.obtenerMapaEtiquetas(service);
+            Map<String, String> idToNameMap = EtiquetadorDeGmails.obtenerMapaEtiquetas(servicio);
 
-            for (Message message : updatedMessages) {
-                String snippet = message.getSnippet();
-                List<String> labelIds = message.getLabelIds();
+            for (Message mensaje : updatedMessages) {
+                String snippet = mensaje.getSnippet();
+                List<String> etiquetaId = mensaje.getLabelIds();
 
-                String etiquetas = labelIds != null
-                        ? labelIds.stream()
+                String etiquetas = etiquetaId != null
+                        ? etiquetaId.stream()
                         .map(id -> idToNameMap.getOrDefault(id, id))
                         .filter(name -> !name.equals("IMPORTANT") && !name.equals("SENT") && !name.equals("INBOX"))
                         .reduce((a, b) -> a + ", " + b)
                         .orElse("Sin etiquetas")
                         : "Sin etiquetas";
 
-                tableModel.addRow(new Object[]{snippet, etiquetas});
+                tablaModelo.addRow(new Object[]{snippet, etiquetas});
             }
 
             System.out.println("Tabla de correos actualizada correctamente.");
@@ -84,14 +84,11 @@ public class EmailVista extends JFrame {
         }
     }
 
-
-
-
     private void etiquetarCorreos() {
         try {
-            messages = EtiquetadorDeGmails.etiquetarCorreos(service, messages);
+            mensaje = EtiquetadorDeGmails.etiquetarCorreos(servicio, mensaje);
             JOptionPane.showMessageDialog(this, "Correos etiquetados correctamente.", "Éxito", JOptionPane.INFORMATION_MESSAGE);
-            cargarEmails(messages);
+            cargarEmails(mensaje);
         } catch (IOException e) {
             e.printStackTrace();
             JOptionPane.showMessageDialog(this, "Error al etiquetar los correos", "Error", JOptionPane.ERROR_MESSAGE);
